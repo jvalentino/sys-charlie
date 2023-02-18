@@ -68,8 +68,16 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+int getPort() {
+	if (project.properties['server.port'] == null) {
+		return 8080
+	}
+
+	project.properties['server.port'].toInteger()
+}
+
 gretty {
-	httpPort = 8080
+	httpPort = getPort()
 	contextPath = '/'
 	//servletContainer = 'jetty9.4'
 	servletContainer = 'tomcat9'

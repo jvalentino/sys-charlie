@@ -148,3 +148,125 @@ Tests that end in "IntgTest" are used for integration testing via Spring Boot Te
 
 Every code commit triggers a Github Action pipeline that runs the entire build process.
 
+## Full System
+
+You can run the entire system locally via Docker, but executing this script:
+
+```bash
+./run-system.sh
+```
+
+This just builds the war file and then execute the docker compose file that contains the system:
+
+```bash
+./gradlew clean build
+docker compose -f docker-compose-system.yaml up -d
+```
+
+### Docker Compose
+
+The real magic is in this docker compose file, which:
+
+- **db** - Runs PostgreSQL on port 5432, which also keeps the data locally in ./dev-db
+- **instance1** - Runs a Tomcat 9 container that is exposed on port 8000, and that also copies the WAR file from the gradle build into its run directoy as ROOT.war. This is what makes the application run at / instead of /the-war-name.
+- **instance2** - Runs the same Tomcat 9 container as a second instance, that is also exposed on port 9000.
+- **nginx** - Runs a web server container to act as a load balancer, with a custom configuration file.
+
+```yaml
+version: '3.8'
+services:
+  db:
+    container_name: charlie-db
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./dev-db:/var/lib/postgresql/data
+
+  instance1:
+    container_name: charlie-instance-1
+    image: tomcat:9-jdk11
+    ports:
+      - '8000:8080'
+    environment:
+      DB_HOST: db
+    volumes:
+      - ./build/libs/sys-charlie-0.0.1.war:/usr/local/tomcat/webapps/ROOT.war
+    depends_on:
+        - db
+
+  instance2:
+    container_name: charlie-instance-2
+    image: tomcat:9-jdk11
+    ports:
+      - '9000:8080'
+    environment:
+      DB_HOST: db
+    volumes:
+      - ./build/libs/sys-charlie-0.0.1.war:/usr/local/tomcat/webapps/ROOT.war
+    depends_on:
+      - db
+
+  nginx:
+    container_name: charlie-load-balancer
+    image: nginx:1.13
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - db
+      - instance1
+      - instance2
+
+```
+
+### nginx
+
+I mostly just copied this from stack overflow, as getting sticky sessions to work was not easy.
+
+```
+events { worker_connections 1024;}
+error_log ... debug;
+# https://serverfault.com/questions/832790/sticky-sessions-with-nginx-proxy
+http {
+    upstream nginx {
+        ip_hash;
+        server instance1:8080;
+        server instance2:8080;
+        keepalive 8;
+    }
+    server {
+        listen 80;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header X-Real_IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-NginX-Proxy true;
+
+        # This is necessary to pass the correct IP to be hashed
+        real_ip_header X-Real-IP;
+
+        location / {
+            proxy_pass http://nginx;
+        }
+
+        proxy_redirect off;
+    }
+}
+```
+
+### Debugging
+
+Docker Desktop is your friend:
+
+![01](./wiki/docker-desktop.png)
+
+From here you can access the individual logs and underlying container runtime environments, easily.

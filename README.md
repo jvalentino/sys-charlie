@@ -168,7 +168,7 @@ docker compose -f docker-compose-system.yaml up -d
 The real magic is in this docker compose file, which:
 
 - **db** - Runs PostgreSQL on port 5432, which also keeps the data locally in ./dev-db
-- **instance1** - Runs a Tomcat 9 container that is exposed on port 8000, and that also copies the WAR file from the gradle build into its run directoy as ROOT.war. This is what makes the application run at / instead of /the-war-name.
+- **instance1** - Runs a Tomcat 9 container that is exposed on port 8000, and that also copies the WAR file from the gradle build into its run directory as ROOT.war. This is what makes the application run at / instead of /the-war-name.
 - **instance2** - Runs the same Tomcat 9 container as a second instance, that is also exposed on port 9000.
 - **nginx** - Runs a web server container to act as a load balancer, with a custom configuration file.
 
